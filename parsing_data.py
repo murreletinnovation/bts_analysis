@@ -14,32 +14,21 @@ import statsmodels.formula.api as smf
 from statsmodels.genmod import families
 
 # Import all files
-reptar_side1_file = 'RePTaR_trials_Aug2021_version1Nov2021.xlsx'
-reptar_side1 = pd.read_excel(reptar_side1_file, sheet_name = 'VIDEOS')
-reptar_animal_info = pd.read_excel(reptar_side1_file, sheet_name = 'ANIMALINFO')
-reptar_side2_file = 'RePTaRtrials_Aadu.xlsx'
-reptar_side2 = pd.read_excel(reptar_side2_file, sheet_name = 'Trials')
+reptar_all_data_file = 'RePTaR_trials_Aug2021_AllData.xlsx'
+reptar_animalinfo_file = 'RePTaR_trials_Aug2021_version1Nov2021.xlsx'
+#reptar_side1 = pd.read_excel(reptar_side1_file, sheet_name = 'VIDEOS')
+reptar_animal_info = pd.read_excel(reptar_animalinfo_file, sheet_name = 'ANIMALINFO')
+#reptar_side2_file = 'RePTaRtrials_Aadu.xlsx'
+reptar_all_data = pd.read_excel(reptar_all_data_file, sheet_name = 'VIDEOS')
 
 # Split data by column (File 1)
-dates_side1 = reptar_side1['Date']
-cumu_time_side1 = reptar_side1['CumulativeTime']
-side_nums_side1 = reptar_side1['Side (1/2)']
-scan_times_side1 = reptar_side1['AdjTimeSide']
-scan_read_bool_side1 = reptar_side1['Read (yes/no)']
-scan_distances_side1 = reptar_side1['ApproxDist(in)']
-pits_side1 = reptar_side1['PITTAG']
-
-# Split data by column (File 2)
-dates_side2 = reptar_side2['Date']
-side_nums_side2 = reptar_side2['Side (1/2)']
-scan_times_side2 = reptar_side2['AdjTimeSide']
-scan_read_bool_side2 = reptar_side2['Read (yes/no)']
-scan_distances_side2 = reptar_side2['ApproxDist(in)']
-pits_side2 = reptar_side2['PITTAG']
-
-# This is a new column that I created in Excel
-cumu_time_side2 = reptar_side2['CumulativeTime']
-
+dates = reptar_all_data['Date']
+cumu_time = reptar_all_data['CumulativeTime']
+side_nums = reptar_all_data['Side (1/2)']
+scan_times = reptar_all_data['AdjTimeSide']
+scan_read_bool = reptar_all_data['Read (1/0)']
+scan_distances = reptar_all_data['ApproxDist(in)']
+pits = reptar_all_data['PITTAG']
 
 # Grab relevant data on ALL snakes
 svl_list = reptar_animal_info['SVL']
@@ -47,6 +36,7 @@ pit_list = reptar_animal_info['PITTAG']
 date_list = reptar_animal_info['DATETEST']
 sex_list = reptar_animal_info['SEX']
 bulge_list = reptar_animal_info['BULGE']
+tailbreak_list = reptar_animal_info['TAILBREAK']
 weight_list = reptar_animal_info['WEIGHT']
 days_list = reptar_animal_info['DAYSINLAB']
 numscans_list = reptar_animal_info['NUMSCANS']
@@ -55,8 +45,10 @@ id_dict = {}
 svl_dict = {}
 sex_dict = {}
 weight_dict = {}
+tailbreak_dict = {}
 bulge_dict = {}
 num_scan_dict = {}
+trimmed_num_scan_dict = {}
 
 path = 'num_scan_data'
 extension = 'csv'
@@ -94,6 +86,7 @@ for idx, date in enumerate(date_list):
     weight_dict[(date1, pit_list[idx])] = weight_list[idx]
     sex_dict[(date1, pit_list[idx])] = sex_list[idx]
     bulge_dict[(date1, pit_list[idx])] = bulge_list[idx]
+    tailbreak_dict[(date1, pit_list[idx])] = tailbreak_list[idx]
     id_dict[(date1, pit_list[idx])] = id
 
     # skip snakes with blank values
@@ -127,8 +120,7 @@ for idx, date in enumerate(date_list):
 # stat1, pval = stats.shapiro(svl_list)
 # print(pval)
 
-successful_scan_distances_side1 = []
-successful_scan_distances_side2 = []
+successful_scan_distances = []
 scan_svls = []
 scan_sides = []
 
@@ -150,6 +142,17 @@ succesful_scan_times = []
 
 categorical_sex = []
 
+num_male_scans = 0
+num_female_scans = 0
+
+_sexes = []
+_distances = []
+_ids = []
+
+# _sexes = []
+# _ids = []
+# _numscans = []
+
 glm_loc = []
 glm_svl = []
 glm_success = []
@@ -162,11 +165,13 @@ unique_svl = []
 posterior_distance_dict = {}
 anterior_distance_dict = {}
 
+total_scans = []
+
 # Iterate through all CSV data and populate
-for idx, val in enumerate(scan_read_bool_side1):
-    pit = pits_side1[idx]
+for idx, val in enumerate(scan_read_bool):
+    pit = pits[idx]
     if not math.isnan(pit):
-        dt = pd.to_datetime(dates_side1[idx])
+        dt = pd.to_datetime(dates[idx])
         date1 = dt.strftime("%m/%d")
 
         svl = svl_dict[(date1, int(pit))]
@@ -176,32 +181,20 @@ for idx, val in enumerate(scan_read_bool_side1):
         if not svl in unique_svl:
             unique_svl.append(svl)
 
-        if not pd.isna(scan_distances_side1[idx]):
-            # Add scans to appropriate M/F dict list
-            if sex == 'M':
-                if id in male_distance_dict and not pd.isna(scan_distances_side1[idx]):
-                    male_distance_dict[id].extend([scan_distances_side1[idx]])
-                else:
-                    male_distance_dict[id] = [scan_distances_side1[idx]]
-            else:
-                if id in female_distance_dict and not pd.isna(scan_distances_side1[idx]):
-                    female_distance_dict[id].extend([scan_distances_side1[idx]])
-                else:
-                    female_distance_dict[id] = [scan_distances_side1[idx]]
-
+        if not pd.isna(scan_distances[idx]):
             # We know the posterior trials took place on these dates
             if date1 == '08/28' or date1 == '08/29':
-                if id in posterior_distance_dict and not pd.isna(scan_distances_side1[idx]):
-                    posterior_distance_dict[id].extend([scan_distances_side1[idx]])
+                if id in posterior_distance_dict and not pd.isna(scan_distances[idx]):
+                    posterior_distance_dict[id].extend([scan_distances[idx]])
                 else:
-                    posterior_distance_dict[id] = [scan_distances_side1[idx]]
+                    posterior_distance_dict[id] = [scan_distances[idx]]
             else:
-                if id in anterior_distance_dict and not pd.isna(scan_distances_side1[idx]):
-                    anterior_distance_dict[id].extend([scan_distances_side1[idx]])
+                if id in anterior_distance_dict and not pd.isna(scan_distances[idx]):
+                    anterior_distance_dict[id].extend([scan_distances[idx]])
                 else:
-                    anterior_distance_dict[id] = [scan_distances_side1[idx]]
+                    anterior_distance_dict[id] = [scan_distances[idx]]
 
-        time = cumu_time_side1[idx]
+        time = cumu_time[idx]
         if not isinstance(time, float):
             pt = datetime.datetime.strptime(time,'%H:%M:%S')
             total_seconds = pt.second + pt.minute*60 + pt.hour*3600
@@ -217,12 +210,14 @@ for idx, val in enumerate(scan_read_bool_side1):
 
         # Add time on trap to M/F lists
         if sex_dict[(date1, int(pit))] == 'M':
-            male_scans.append(scan_distances_side1[idx])
+            male_scans.append(scan_distances[idx])
+            num_male_scans += 1
             categorical_sex.append(0)
             if not total_seconds is 0 and total_seconds not in male_timeons:
                 male_timeons.append(total_seconds)
         else:
-            female_scans.append(scan_distances_side1[idx])
+            female_scans.append(scan_distances[idx])
+            num_female_scans += 1
             categorical_sex.append(1)
             if not total_seconds is 0 and total_seconds not in female_timeons:
                 female_timeons.append(total_seconds)
@@ -232,212 +227,162 @@ for idx, val in enumerate(scan_read_bool_side1):
         else:
             glm_loc.append(0)
 
-        if val == 'yes':
+        if val == 1:
+            if not pd.isna(scan_distances[idx]):
+                total_scans.append(scan_distances[idx])
+                _distances.append(scan_distances[idx])
+                _ids.append(id)
+
+                if sex == 'M':
+                    _sexes.append(0)
+                else:
+                    _sexes.append(1)
+
             glm_success.append(1)
         else:
             glm_success.append(0)
 
-# Repeat for 2nd file
-for idx, val in enumerate(scan_read_bool_side2):
-    pit = pits_side2[idx]
-    if not math.isnan(pit):
+print("\n\
+----------------------------------------------------------------------------\n\
+- (OLS Regression) NumScans ~ Sex -\n\
+----------------------------------------------------------------------------\n\
+")
 
-        dt = pd.to_datetime(dates_side2[idx])
-        date1 = dt.strftime("%m/%d")
-
-        svl = svl_dict[(date1, int(pit))]
-        id = id_dict[(date1, int(pit))]
-        sex = sex_dict[(date1, int(pit))]
-        glm_svl.append(svl)
-        if not svl in unique_svl:
-            unique_svl.append(svl)
-
-        if not pd.isna(scan_distances_side2[idx]):
-            if sex == 'M':
-                if id in male_distance_dict:
-                    male_distance_dict[id].extend([scan_distances_side2[idx]])
-                else:
-                    male_distance_dict[id] = [scan_distances_side2[idx]]
-            else:
-                if id in female_distance_dict:
-                    female_distance_dict[id].extend([scan_distances_side2[idx]])
-                else:
-                    female_distance_dict[id] = [scan_distances_side2[idx]]
-
-            if date1 == '08/28' or date1 == '08/29':
-                if id in posterior_distance_dict and not pd.isna(scan_distances_side2[idx]):
-                    posterior_distance_dict[id].extend([scan_distances_side2[idx]])
-                else:
-                    posterior_distance_dict[id] = [scan_distances_side2[idx]]
-            else:
-                if id in anterior_distance_dict and not pd.isna(scan_distances_side2[idx]):
-                    anterior_distance_dict[id].extend([scan_distances_side2[idx]])
-                else:
-                    anterior_distance_dict[id] = [scan_distances_side2[idx]]
-
-        time = cumu_time_side2[idx]
-        if not isinstance(time, float):
-            pt = datetime.datetime.strptime(time,'%H:%M:%S')
-            total_seconds = pt.second + pt.minute*60 + pt.hour*3600
-            if total_seconds not in timeons:
-                timeons.append(total_seconds)
-                log_timeons.append(np.log(total_seconds))
-                timeon_svls.append(svl)
-                timeon_ids.append(id)
-        else:
-            total_seconds = 0
-
-        if sex_dict[(date1, int(pit))] == 'M':
-            male_scans.append(scan_distances_side2[idx])
-            categorical_sex.append(0)
-            if not total_seconds is 0 and total_seconds not in male_timeons:
-                male_timeons.append(total_seconds)
-        else:
-            female_scans.append(scan_distances_side2[idx])
-            categorical_sex.append(1)
-            if not total_seconds is 0 and total_seconds not in female_timeons:
-                female_timeons.append(total_seconds)
-
-        if date1 == '08/28' or date1 == '08/29':
-            glm_loc.append(1)
-        else:
-            glm_loc.append(0)
-
-        if val == 'yes':
-            glm_success.append(1)
-        else:
-            glm_success.append(0)
-
-# stat1, pval = stats.shapiro(unique_svl)
-# print("Total Scans Shapiro Test p-val: ", pval)
-# sys.exit(0)
-#
-# # 32 individuals
-# print(len(male_distance_dict))
-# print(len(female_distance_dict))
-#
-posterior_distance_list = []
-for key,value in posterior_distance_dict.items() :
-    posterior_distance_list.append(np.average(value))
-
-anterior_distance_list = []
-for key,value in anterior_distance_dict.items() :
-    anterior_distance_list.append(np.average(value))
-
-print(posterior_distance_list)
-print(anterior_distance_list)
-
-stat, p_val = stats.ranksums(posterior_distance_list, \
-anterior_distance_list, alternative='less')
-
-print("\nAverage Posterior Scan Distance: ", np.average(posterior_distance_list))
-print("Average Anterior Scan Distance: ", np.average(anterior_distance_list))
-print("Wilcoxon Rank Sum p-value: ", p_val)
-print("\n")
-
-sys.exit(0)
-
-
-# df = pd.DataFrame(list(zip(glm_success, glm_svl, glm_loc)), columns =['Success', 'SVL', 'Loc'])
-# md = smf.glm("Success ~ C(Loc) + SVL + C(Loc)*SVL", df, family=families.Binomial())
-# mdf = md.fit()
-# #print(mdf.random_effects)
-# print(mdf.summary())
-# sys.exit(0)
-
-# for idx, val in enumerate(scan_read_bool_side1):
-    # if val == 'yes':
-    #     succesful_scan_times.append(scan_times_side1[idx])
-    #     if not math.isnan(scan_distances_side1[idx]):
-    #         successful_scan_distances_side1.append(scan_distances_side1[idx])
-    #         scan_sides.append(side_nums_side1[idx])
-    #         pit = pits_side1[idx]
-    #         if not math.isnan(pit):
-    #             dt = pd.to_datetime(dates_side1[idx])
-    #             date1 = dt.strftime("%m/%d")
-    #             time1 = scan_times_side1[idx].strftime("%H:%M:S")
-    #             succesful_scan_times.append(time1)
-    #             svl = svl_dict[(date1, int(pit))]
-    #             unique_id = id_dict[(date1, int(pit))]
-    #             scan_svls.append(svl)
-    #
-    #             if date1 == '08/28' or date1 == '08/29':
-    #                 distances_posterior.append(scan_distances_side1[idx])
-    #             else:
-    #                 distances_anterior.append(scan_distances_side1[idx])
-    #
-    #             time = cumu_time_side1[idx]
-    #             if not isinstance(time, float):
-    #                 pt = datetime.datetime.strptime(time,'%H:%M:%S')
-    #                 total_seconds = pt.second + pt.minute*60 + pt.hour*3600
-    #                 if total_seconds not in timeons:
-    #                     timeons.append(total_seconds)
-    #                     log_timeons.append(np.log(total_seconds))
-    #                     timeon_svls.append(svl)
-    #                     timeon_ids.append(unique_id)
-    #             else:
-    #                 total_seconds = 0
-    #
-    #             if sex_dict[(date1, int(pit))] == 'M':
-    #                 male_scans.append(scan_distances_side1[idx])
-    #                 categorical_sex.append(0)
-    #                 if not total_seconds is 0 and total_seconds not in male_timeons:
-    #                     male_timeons.append(total_seconds)
-    #             else:
-    #                 female_scans.append(scan_distances_side1[idx])
-    #                 categorical_sex.append(1)
-    #                 if not total_seconds is 0 and total_seconds not in female_timeons:
-    #                     female_timeons.append(total_seconds)
-
-# for idx, val in enumerate(scan_read_bool_side2):
-    # if val == 'yes':
-    #     if not math.isnan(scan_distances_side2[idx]):
-    #         successful_scan_distances_side2.append(scan_distances_side2[idx])
-    #         scan_sides.append(side_nums_side2[idx])
-    #         pit = pits_side2[idx]
-    #         if not math.isnan(pit):
-    #             dt = pd.to_datetime(dates_side2[idx])
-    #             date2 = dt.strftime("%m/%d")
-    #             time1 = scan_times_side2[idx].strftime("%H")
-    #             succesful_scan_times.append(time1)
-    #             svl = svl_dict[(date2, int(pit))]
-    #             unique_id = id_dict[(date2, int(pit))]
-    #             scan_svls.append(svl)
-    #
-    #             if date2 == '08/28' or date2 == '08/29':
-    #                 distances_posterior.append(scan_distances_side2[idx])
-    #             else:
-    #                 distances_anterior.append(scan_distances_side2[idx])
-    #
-    #             time = cumu_time_side2[idx]
-    #             if not isinstance(time, float):
-    #                 pt = datetime.datetime.strptime(time,'%H:%M:%S')
-    #                 total_seconds = pt.second + pt.minute*60 + pt.hour*3600
-    #                 if total_seconds not in timeons:
-    #                     timeons.append(total_seconds)
-    #                     log_timeons.append(np.log(total_seconds))
-    #                     timeon_svls.append(svl)
-    #                     timeon_ids.append(unique_id)
-    #             else:
-    #                 total_seconds = 0
-    #
-    #             if sex_dict[(date2, int(pit))] == 'M':
-    #                 male_scans.append(scan_distances_side2[idx])
-    #                 categorical_sex.append(0)
-    #                 if not total_seconds is 0 and total_seconds not in male_timeons:
-    #                     male_timeons.append(total_seconds)
-    #             else:
-    #                 female_scans.append(scan_distances_side2[idx])
-    #                 categorical_sex.append(1)
-    #                 if not total_seconds is 0 and total_seconds not in female_timeons:
-    #                     female_timeons.append(total_seconds)
-
-df = pd.DataFrame(list(zip(timeon_ids, categorical_sex, timeon_svls, log_timeons)), columns =['ID', 'Sex', 'SVL', 'TimeOn'])
-md = smf.mixedlm("TimeOn ~ SVL + C(Sex)", df, groups=df["ID"])
+df = pd.DataFrame(list(zip(numscans_list, sex_list)), columns =['NumScans', 'Sex'])
+md = smf.ols("NumScans ~ C(Sex)", df)
 mdf = md.fit()
-#print(mdf.random_effects)
 print(mdf.summary())
-sys.exit(0)
+
+# print("\n\
+# ----------------------------------------------------------------------------\n\
+# - Check Homoscedasticity of NumScans ~ Sex -\n\
+# ----------------------------------------------------------------------------\n\
+# ")
+#
+# linear_residuals = []
+# for idx, y_real in enumerate(numscans_list):
+#     linear_residuals.append(y_real - mdf.fittedvalues[idx])
+#
+# squared_residuals = np.square(linear_residuals)
+# df = pd.DataFrame(list(zip(total_ids, squared_residuals)), columns =['ID', 'Residuals'])
+# md = smf.ols("Residuals ~ ID", df)
+# mdf = md.fit()
+# table = sm.stats.anova_lm(mdf, typ=2) # Type 2 ANOVA DataFrame
+# print(table)
+
+print("\n\
+----------------------------------------------------------------------------\n\
+- (OLS Regression) NumScans ~ Bulge -\n\
+----------------------------------------------------------------------------\n\
+")
+
+df = pd.DataFrame(list(zip(numscans_list, bulge_list)), columns =['NumScans', 'Bulge'])
+md = smf.ols("NumScans ~ C(Bulge)", df)
+mdf = md.fit()
+print(mdf.summary())
+
+# print("\n\
+# ----------------------------------------------------------------------------\n\
+# - Check Homoscedasticity of NumScans ~ Bulge -\n\
+# ----------------------------------------------------------------------------\n\
+# ")
+#
+# linear_residuals = []
+# for idx, y_real in enumerate(numscans_list):
+#     linear_residuals.append(y_real - mdf.fittedvalues[idx])
+#
+# squared_residuals = np.square(linear_residuals)
+# df = pd.DataFrame(list(zip(total_ids, squared_residuals)), columns =['ID', 'Residuals'])
+# md = smf.ols("Residuals ~ ID", df)
+# mdf = md.fit()
+# table = sm.stats.anova_lm(mdf, typ=2) # Type 2 ANOVA DataFrame
+# print(table)
+
+print("\n\
+----------------------------------------------------------------------------\n\
+- (OLS Regression) NumScans ~ Tailbreak -\n\
+----------------------------------------------------------------------------\n\
+")
+
+df = pd.DataFrame(list(zip(numscans_list, tailbreak_list)), columns =['NumScans', 'Tailbreak'])
+md = smf.ols("NumScans ~ C(Tailbreak)", df)
+mdf = md.fit()
+print(mdf.summary())
+
+# print("\n\
+# ----------------------------------------------------------------------------\n\
+# - Check Homoscedasticity of NumScans ~ Tailbreak -\n\
+# ----------------------------------------------------------------------------\n\
+# ")
+#
+# linear_residuals = []
+# for idx, y_real in enumerate(numscans_list):
+#     linear_residuals.append(y_real - mdf.fittedvalues[idx])
+#
+# squared_residuals = np.square(linear_residuals)
+# df = pd.DataFrame(list(zip(total_ids, squared_residuals)), columns =['ID', 'Residuals'])
+# md = smf.ols("Residuals ~ ID", df)
+# mdf = md.fit()
+# table = sm.stats.anova_lm(mdf, typ=2) # Type 2 ANOVA DataFrame
+# print(table)
+
+print("\n\
+----------------------------------------------------------------------------\n\
+- Shapiro Test of Scan Distances -\n\
+----------------------------------------------------------------------------\n\
+")
+
+stat1, pval = stats.shapiro(_distances)
+print("Scan Distance Shapiro Test p-val: ", pval)
+log_distances = np.log(_distances)
+stat1, pval = stats.shapiro(log_distances)
+print("Log(Scan Distances) Shapiro Test p-val: ", pval)
+
+print("\n\
+----------------------------------------------------------------------------\n\
+- (Mixed Linear Model) Distance of Scans ~ C(Sex) + ID -\n\
+----------------------------------------------------------------------------\n\
+")
+
+#log_distances = np.log(_distances)
+df = pd.DataFrame(list(zip(_ids, _distances, _sexes)), columns =['ID', 'Distance', 'Sex'])
+md = smf.mixedlm("Distance ~ C(Sex) + ID", df, groups=df["ID"])
+mdf = md.fit()
+print(mdf.summary())
+
+# print("\n\
+# ----------------------------------------------------------------------------\n\
+# - Check Homoscedasticity of Distance of Scans ~ C(Sex) + ID -\n\
+# ----------------------------------------------------------------------------\n\
+# ")
+#
+# linear_residuals = []
+# for idx, y_real in enumerate(_distances):
+#     linear_residuals.append(y_real - mdf.fittedvalues[idx])
+#
+# squared_residuals = np.square(linear_residuals)
+# df = pd.DataFrame(list(zip(total_ids, squared_residuals)), columns =['ID', 'Residuals'])
+# md = smf.ols("Residuals ~ ID", df)
+# mdf = md.fit()
+# table = sm.stats.anova_lm(mdf, typ=2) # Type 2 ANOVA DataFrame
+# print(table)
+
+# slope, intercept, rvalue, pvalue, stderr = stats.linregress(total_ids, squared_residuals);
+#
+# print('B0 : {}'.format(np.round(intercept,4)))
+# print('B1 : {}'.format(np.round(slope,4)))
+# print('R^2 : {}'.format(np.round(rvalue**2,3)))
+# print('R : {}'.format(np.round(rvalue,3)))
+# print('pvalue : {}'.format(np.round(pvalue,5)))
+
+# fig = plt.figure(figsize=(5,5))
+# axis = fig.add_subplot(111)
+# plt.scatter(mdf.fittedvalues, linear_residuals, c='k')
+# plt.xlabel('Fitted Number of Scans');
+# plt.ylabel('Linear Residual');
+# plt.title('Residual Analysis of Linear Regression')
+# plt.legend();
+# plt.show()
 
 # df = pd.DataFrame(list(zip(timeon_ids, categorical_sex, timeon_svls, log_timeons)), columns =['ID', 'Sex', 'SVL', 'TimeOn'])
 # md = smf.ols("TimeOn ~ SVL", df)
@@ -451,16 +396,16 @@ sys.exit(0)
 # print(mdf.summary())
 # sys.exit(0)
 
-log_numscans = np.log(total_numscans)
-slope, intercept, rvalue, pvalue, stderr = stats.linregress(total_svls, total_numscans);
-
-print('B0 : {}'.format(np.round(intercept,4)))
-print('B1 : {}'.format(np.round(slope,4)))
-print('R^2 : {}'.format(np.round(rvalue**2,3)))
-print('R : {}'.format(np.round(rvalue,3)))
-print('pvalue : {}'.format(np.round(pvalue,5)))
-
-sys.exit(0)
+# log_numscans = np.log(total_numscans)
+# slope, intercept, rvalue, pvalue, stderr = stats.linregress(total_svls, total_numscans);
+#
+# print('B0 : {}'.format(np.round(intercept,4)))
+# print('B1 : {}'.format(np.round(slope,4)))
+# print('R^2 : {}'.format(np.round(rvalue**2,3)))
+# print('R : {}'.format(np.round(rvalue,3)))
+# print('pvalue : {}'.format(np.round(pvalue,5)))
+#
+# sys.exit(0)
 
 # Create points for the regression line
 # x = np.linspace(np.min(total_svls), np.max(total_svls), 2) # make two x coordinates from min and max values of SLI_max
@@ -494,11 +439,11 @@ sys.exit(0)
 # plt.legend();
 # plt.show()
 #
-df = pd.DataFrame(list(zip(total_ids, total_sex, total_svls, log_numscans)), columns =['ID', 'Sex', 'SVL', 'Log_NumScans'])
-md = smf.ols("Log_NumScans ~ SVL + C(Sex)", df)
-mdf = md.fit()
-print(mdf.summary())
-sys.exit(0)
+# df = pd.DataFrame(list(zip(total_ids, total_sex, total_svls, log_numscans)), columns =['ID', 'Sex', 'SVL', 'Log_NumScans'])
+# md = smf.ols("Log_NumScans ~ SVL + C(Sex)", df)
+# mdf = md.fit()
+# print(mdf.summary())
+# sys.exit(0)
 
 # df = pd.DataFrame(list(zip(total_ids, total_sex, total_weights, total_svls, log_numscans)), columns =['ID', 'Sex', 'Weight', 'SVL', 'Log_NumScans'])
 # md = smf.ols("Log_NumScans ~ SVL + Weight", df)
@@ -660,8 +605,6 @@ sys.exit(0)
 # - Plot Regression of SVL vs Time on Trap -\n\
 # --------------------------------------------------------------------------\n\
 # ")
-
-
 
 # log_timeons = np.log(timeons)
 # slope, intercept, rvalue, pvalue, stderr = stats.linregress(timeon_svls, timeons);
